@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Video Downloader</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>YouTube Video Downloader</h1>
+            <p>Enter a YouTube URL to download the video</p>
+        </header>
+
+        <main>
+            <div class="url-section">
+                <div class="input-group">
+                    <input 
+                        type="url" 
+                        id="urlInput" 
+                        placeholder="https://www.youtube.com/watch?v=..." 
+                        required
+                    >
+                    <button type="button" id="previewBtn">Preview</button>
+                </div>
+            </div>
+
+            <div class="format-selection">
+                <h4>Download Format</h4>
+                <div class="format-tabs">
+                    <button class="tab-btn active" data-format="video">Video (MP4)</button>
+                    <button class="tab-btn" data-format="audio">Audio Only (MP3)</button>
+                </div>
+                
+                <div class="quality-options">
+                    <select id="qualitySelect">
+                        <option value="best">Best Quality</option>
+                        <option value="1080p">1080p</option>
+                        <option value="720p">720p</option>
+                        <option value="480p">480p</option>
+                        <option value="360p">360p</option>
+                    </select>
+                </div>
+            </div>
+
+            <div id="videoInfo" class="video-info hidden">
+                <div class="info-content">
+                    <img id="thumbnail" src="" alt="Video thumbnail">
+                    <div class="details">
+                        <h3 id="videoTitle"></h3>
+                        <p id="videoDuration"></p>
+                        <p id="videoQuality" class="quality-info"></p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Processing...</p>
+            </div>
+
+            <div id="error" class="error hidden"></div>
+
+            <div class="download-section">
+                <button type="button" id="downloadBtn" disabled>
+                    <span id="downloadText">Download Video</span>
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
