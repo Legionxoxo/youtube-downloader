@@ -110,7 +110,7 @@ class YouTubeService {
         console.time('⏱️ Video Info Fetch');
         const cookieOptions = this.getCookieOptions();
         try {
-            const info = await youtubeDl.default(url, {
+            const info = await youtubeDl(url, {
                 dumpSingleJson: true,
                 noWarnings: true,
                 // noCallHome: true, // Not available in current version
