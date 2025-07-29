@@ -17,6 +17,7 @@ const tabBtns = document.querySelectorAll('.tab-btn');
 let currentVideoInfo = null;
 let currentFormat = 'video';
 let isDownloading = false;
+let downloadController = null;
 
 function showElement(element) {
     element.classList.remove('hidden');
@@ -34,6 +35,43 @@ function showError(message) {
 
 function hideError() {
     hideElement(error);
+}
+
+function showProgressBar() {
+    const progressContainer = document.getElementById('progressContainer');
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    
+    if (progressContainer) {
+        showElement(progressContainer);
+        progressBar.style.width = '0%';
+        progressText.textContent = 'Starting download...';
+    }
+    hideElement(loading);
+}
+
+function hideProgressBar() {
+    const progressContainer = document.getElementById('progressContainer');
+    if (progressContainer) {
+        hideElement(progressContainer);
+    }
+}
+
+function updateProgress(percentage, customText = null) {
+    const progressBar = document.getElementById('progressBar');
+    const progressText = document.getElementById('progressText');
+    
+    if (!progressBar || !progressText) return;
+    
+    if (percentage >= 0) {
+        progressBar.style.width = `${percentage}%`;
+        progressText.textContent = customText || `Downloading... ${percentage}%`;
+    } else {
+        // Indeterminate progress
+        progressBar.style.width = '100%';
+        progressBar.classList.add('indeterminate');
+        progressText.textContent = customText || 'Downloading...';
+    }
 }
 
 function formatDuration(seconds) {
@@ -88,19 +126,22 @@ async function getVideoInfo(url) {
 async function downloadVideo(url) {
     try {
         isDownloading = true;
+        downloadController = new AbortController();
         updateDownloadButton();
-        showElement(loading);
+        showProgressBar();
         hideError();
         
         const quality = qualitySelect.value;
         const format = currentFormat === 'audio' ? 'mp3' : 'mp4';
         
+        // Start streaming download with abort signal
         const response = await fetch('/download', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ url, quality, format })
+            body: JSON.stringify({ url, quality, format }),
+            signal: downloadController.signal
         });
         
         if (!response.ok) {
@@ -108,7 +149,38 @@ async function downloadVideo(url) {
             throw new Error(errorData.error || 'Download failed');
         }
         
-        const blob = await response.blob();
+        // Stream the response with progress tracking
+        const reader = response.body.getReader();
+        const contentLength = response.headers.get('Content-Length');
+        const chunks = [];
+        let receivedLength = 0;
+        
+        while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) break;
+            
+            // Check if download was cancelled
+            if (downloadController.signal.aborted) {
+                reader.cancel();
+                throw new Error('Download cancelled');
+            }
+            
+            chunks.push(value);
+            receivedLength += value.length;
+            
+            // Update progress if content length is known
+            if (contentLength) {
+                const progress = (receivedLength / contentLength) * 100;
+                updateProgress(Math.round(progress));
+            } else {
+                // Show indeterminate progress
+                updateProgress(-1, `Downloaded ${formatBytes(receivedLength)}`);
+            }
+        }
+        
+        // Combine chunks into blob
+        const blob = new Blob(chunks);
         const downloadUrl = window.URL.createObjectURL(blob);
         
         const extension = currentFormat === 'audio' ? 'mp3' : 'mp4';
@@ -120,15 +192,34 @@ async function downloadVideo(url) {
         document.body.removeChild(a);
         
         window.URL.revokeObjectURL(downloadUrl);
-        hideElement(loading);
+        hideProgressBar();
         
     } catch (err) {
-        showError(err.message);
-        hideElement(loading);
+        if (err.name === 'AbortError' || err.message === 'Download cancelled') {
+            showError('Download cancelled');
+        } else {
+            showError(err.message);
+        }
+        hideProgressBar();
     } finally {
         isDownloading = false;
+        downloadController = null;
         updateDownloadButton();
     }
+}
+
+function cancelDownload() {
+    if (downloadController) {
+        downloadController.abort();
+    }
+}
+
+function formatBytes(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 function isValidYouTubeUrl(url) {
@@ -140,12 +231,16 @@ function updateDownloadButton() {
     const formatType = currentFormat === 'audio' ? 'Audio' : 'Video';
     
     if (isDownloading) {
-        downloadText.textContent = 'Downloading...';
-        downloadBtn.disabled = true;
+        downloadText.textContent = 'Cancel Download';
+        downloadBtn.disabled = false;
+        downloadBtn.onclick = cancelDownload;
+        downloadBtn.style.background = '#dc3545';
     } else {
         downloadText.textContent = `Download ${formatType}`;
         const url = urlInput.value.trim();
         downloadBtn.disabled = !isValidYouTubeUrl(url);
+        downloadBtn.onclick = null;
+        downloadBtn.style.background = '';
     }
 }
 

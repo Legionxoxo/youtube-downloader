@@ -33,7 +33,9 @@ app.post("/download", async (req, res) => {
             `attachment; filename="${title}.${fileExtension}"`
         );
         res.header("Content-Type", contentType);
+        res.header("Transfer-Encoding", "chunked");
 
+        // Stream directly to response
         stream.stdout.pipe(res);
 
         stream.on("error", (error) => {
@@ -42,10 +44,35 @@ app.post("/download", async (req, res) => {
                 res.status(500).json({ error: "Failed to download video" });
             }
         });
+
+        stream.on("close", () => {
+            console.log("Download completed");
+        });
     } catch (error) {
         console.error("Download error:", error);
         res.status(500).json({ error: "Failed to download video" });
     }
+});
+
+// Add progress tracking endpoint
+app.get("/download-progress/:downloadId", (req, res) => {
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Cache-Control'
+    });
+
+    const downloadId = req.params.downloadId;
+    
+    // Send initial connection
+    res.write(`data: ${JSON.stringify({ type: 'connected' })}\n\n`);
+
+    // Clean up on client disconnect
+    req.on('close', () => {
+        console.log(`Progress stream closed for ${downloadId}`);
+    });
 });
 
 app.get("/info", async (req, res) => {

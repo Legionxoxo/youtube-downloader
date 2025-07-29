@@ -2,12 +2,22 @@ const youtubeDl = require('youtube-dl-exec');
 
 class YouTubeService {
     static async getVideoInfo(url) {
+        const startCpu = process.cpuUsage();
+        const startMemory = process.memoryUsage();
+        
+        console.time('⏱️ Video Info Fetch');
         const info = await youtubeDl(url, {
             dumpSingleJson: true,
             noWarnings: true,
             noCallHome: true,
             noCheckCertificate: true,
         });
+        console.timeEnd('⏱️ Video Info Fetch');
+        
+        const endCpu = process.cpuUsage(startCpu);
+        const endMemory = process.memoryUsage();
+        console.log(`🖥️ Info Fetch CPU: User ${Math.round(endCpu.user / 1000)}ms, System ${Math.round(endCpu.system / 1000)}ms`);
+        console.log(`📊 Info Fetch Memory: +${Math.round((endMemory.heapUsed - startMemory.heapUsed) / 1024 / 1024)}MB heap`);
 
         console.log('=== RAW YOUTUBE DATA ===');
         console.log('Title:', info.title);
@@ -221,7 +231,44 @@ class YouTubeService {
         }
 
         console.log(`Downloading with format: ${downloadFormat}`);
+        
+        // Track merge time for video formats that need merging
+        const needsMerging = downloadFormat.includes('+') || (format === 'mp3' && options.extractAudio);
+        if (needsMerging) {
+            console.time('🔄 Video/Audio Merge');
+        }
+        
+        // Log initial memory and CPU usage
+        const initialMemory = process.memoryUsage();
+        const initialCpuUsage = process.cpuUsage();
+        console.log(`📊 Initial Memory: RSS ${Math.round(initialMemory.rss / 1024 / 1024)}MB, Heap ${Math.round(initialMemory.heapUsed / 1024 / 1024)}MB`);
+        console.log(`🖥️ Initial CPU: User ${Math.round(initialCpuUsage.user / 1000)}ms, System ${Math.round(initialCpuUsage.system / 1000)}ms`);
+        
+        console.time('⬇️ Download Process');
         const stream = youtubeDl.exec(url, options);
+        
+        // Track when merging completes (if applicable)
+        if (needsMerging) {
+            stream.on('close', () => {
+                console.timeEnd('🔄 Video/Audio Merge');
+                const mergeMemory = process.memoryUsage();
+                const mergeCpuUsage = process.cpuUsage(initialCpuUsage);
+                console.log(`📊 After Merge: RSS ${Math.round(mergeMemory.rss / 1024 / 1024)}MB, Heap ${Math.round(mergeMemory.heapUsed / 1024 / 1024)}MB`);
+                console.log(`🖥️ Merge CPU Usage: User ${Math.round(mergeCpuUsage.user / 1000)}ms, System ${Math.round(mergeCpuUsage.system / 1000)}ms`);
+            });
+        }
+        
+        stream.on('close', () => {
+            console.timeEnd('⬇️ Download Process');
+            const finalMemory = process.memoryUsage();
+            const finalCpuUsage = process.cpuUsage(initialCpuUsage);
+            
+            console.log(`📊 Final Memory: RSS ${Math.round(finalMemory.rss / 1024 / 1024)}MB, Heap ${Math.round(finalMemory.heapUsed / 1024 / 1024)}MB`);
+            console.log(`📈 Memory Delta: RSS +${Math.round((finalMemory.rss - initialMemory.rss) / 1024 / 1024)}MB, Heap +${Math.round((finalMemory.heapUsed - initialMemory.heapUsed) / 1024 / 1024)}MB`);
+            console.log(`🖥️ Total CPU Usage: User ${Math.round(finalCpuUsage.user / 1000)}ms, System ${Math.round(finalCpuUsage.system / 1000)}ms`);
+            console.log(`⚡ CPU Efficiency: ${Math.round((finalCpuUsage.user + finalCpuUsage.system) / 1000)}ms total CPU time`);
+        });
+        
         return { stream, contentType, fileExtension };
     }
 
